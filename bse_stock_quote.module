@@ -105,7 +105,7 @@ function bse_stock_quote_block_view($delta='') {
   $block = array();
 
   switch ($delta) {
-    case 'bse_quote_block' :
+    case 'bse_stock_quote_block' :
       $block['subject'] = t('BSE Quotes');
       $block['content'] = bse_stock_quote_quote_block();
       break;
