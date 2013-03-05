@@ -1,0 +1,243 @@
+<?php
+
+/**
+ * @file
+ * Enables the administrator to config BSE quotes in a block and page.
+ */
+
+
+/**
+ * Implements hook_help().
+ */
+function bse_stock_quote_help($path, $arg) {
+  if ($path == 'admin/help#bse_stock_quote') {
+    if (current_path() != 'admin/help/bse_stock_quote') {
+      return TRUE;
+    }
+    $output = '<h3>' . t('About') . '</h3>';
+    $output .= '<p>' . t('It will allow users to administrator to display current BSE stock quotes. This module creates a page(' . l('BSE Quotes', 'bse_quotes') . ') and a block(BSE Quote Block) to display quotes.') . '</p>';
+    return $output;
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function bse_stock_quote_permission() {
+  return array(
+      'administer bse quotes' => array(
+          'title' => t('Administer bse quotes'),
+          'description' => t('Allows a user to configure and administrate BSE Quotes.'),
+      ),
+      'use bse quotes' => array(
+          'title' => t('Use bse quotes'),
+          'description' => t('Allows user to use bse quotes.'),
+      ),
+  );
+}
+
+/**
+ * Implements of hook_menu()
+ */
+function bse_stock_quote_menu() {
+  $items['admin/config/services/bse-stock-quote/config-quotes'] = array(
+      'title' => 'BSE Quotes',
+      'description' => 'Configure BSE Quotes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('bse_stock_quote_config_form'),
+      'access arguments' => array('administer bse quotes'),
+      'access callback' => TRUE,
+      'type' => MENU_LOCAL_TASK,
+      'file' => 'bse_stock_quote.admin.inc',
+  );
+  $items['admin/config/services/bse-stock-quote/bse-stock-quote-names/autocomplete'] = array(
+      'page callback' => '_bse_stock_quote_names_autocomplete',
+      'access arguments' => array('administer bse quotes'),
+      'type' => MENU_CALLBACK,
+      'file' => 'bse_stock_quote.admin.inc',
+  );
+  $items['admin/config/services/bse-stock-quote'] = array(
+      'title' => 'BSE Quotes',
+      'description' => 'Configure the BSE stock quote.',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('bse_stocks_quote_list'),
+      'access arguments' => array('administer bse quotes'),
+      'type' => MENU_NORMAL_ITEM,
+      'weight' => 30,
+      'file' => 'bse_stock_quote.admin.inc',
+  );
+  $items['admin/config/services/bse-stock-quote/stocks-list'] = array(
+      'title' => 'BSE Configured Quotes',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('bse_stocks_quote_list'),
+      'access arguments' => array('administer bse quotes'),
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => 30,
+      'file' => 'bse_stock_quote.admin.inc',
+  );
+  $items['bse-stock-quote'] = array(
+      'title' => 'BSE Quotes',
+      'page callback' => 'bse_stock_quotes',
+      'access arguments' => array('use bse quotes'),
+      'type' => MENU_NORMAL_ITEM,
+      'weight' => 30,
+      'file' => 'bse_stock_quote.pages.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function bse_stock_quote_block_info() {
+  $blocks = array();
+  $blocks['bse_stock_quote_block'] = array(
+      'info' => t('BSE Quote Block'),
+  );
+
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function bse_stock_quote_block_view($delta='') {
+  $block = array();
+
+  switch ($delta) {
+    case 'bse_quote_block' :
+      $block['subject'] = t('BSE Quotes');
+      $block['content'] = bse_stock_quote_quote_block();
+      break;
+  }
+
+  return $block;
+}
+
+/**
+ * Generate BSE Quote block
+ */
+function bse_stock_quote_quote_block() {
+  $items = array();
+
+  $query = db_select('bse_stock_quote', 'bse_stock_quote')
+  ->condition('status', 1)
+  ->range(0, 20)
+  ->fields('bse_stock_quote', array(
+      'id',
+      'stock_code',
+      'stock_name',
+      'status',
+  ));
+
+  $results = $query->execute();
+  $stock_quote = array();
+  while ($record = $results->fetchAssoc()) {
+    $stock_quote[$record['stock_code']] = _bse_stock_quote_get_stock_quote($record['stock_code']);
+  }
+
+  return theme('block-quote', array('quotes' => $stock_quote));
+}
+
+/**
+ * Implements hook_theme().
+ */
+function bse_stock_quote_theme() {
+  $module_path = drupal_get_path('module', 'bse_stock_quote');
+  $base = array('path' => "$module_path/theme", );
+  return array('block-quote' => $base +
+      array(
+          'template' => 'block-quote',
+          'variables' => array('items' => NULL, ),
+      ),
+      'page-quote' => $base +
+      array(
+          'template' => 'page-quote',  //leave off .tpl.php
+          'variables' => array('items' => NULL, ),
+      ),
+  );
+}
+
+/**
+ * Implements of hook_bse_quotes_operations().
+ */
+function bse_stock_quote_bse_stock_quote_operations($form = array(), $form_state = array()) {
+  $operations = array(
+      'publish' => array(
+          'label' => t('Publish the selected Quotes'),
+          'callback' => 'bse_stock_quote_bse_stock_quote_operations_publish',
+      ),
+      'unpublish' => array(
+          'label' => t('Unpublish the selected Quotes'),
+          'callback' => 'bse_stock_quote_bse_stock_quote_operations_unpublish',
+      ),
+      'delete' => array(
+          'label' => t('Delete the selected Quotes'),
+          'callback' => 'bse_stock_quote_bse_stock_quote_operations_delete',
+      ),
+  );
+  return $operations;
+}
+
+/**
+ * Callback function for admin mass publishing quotes.
+ */
+function bse_stock_quote_bse_stock_quote_operations_publish($quotes) {
+  db_update('bse_stock_quote')
+  ->fields(
+  array(
+  'status' => 1,
+  )
+  )
+  ->condition('id', $quotes, 'IN')
+  ->execute();
+}
+
+/**
+ * Callback function for admin mass unpublishing links.
+ */
+function bse_stock_quote_bse_stock_quote_operations_unpublish($quotes) {
+  db_update('bse_stock_quote')
+  ->fields(
+  array(
+  'status' => 0,
+  )
+  )
+  ->condition('id', $quotes, 'IN')
+  ->execute();
+}
+
+/**
+ * Callback function for admin mass deleting links.
+ */
+function bse_stock_quote_bse_stock_quote_operations_delete($quotes) {
+  db_delete('bse_stock_quote')
+  ->condition('id', $quotes, 'IN')
+  ->execute();
+  drupal_set_message(t('The links has been deleted.'));
+}
+
+/**
+ * Return an array of Stock Quote for given Stock Code
+ * @param (int) $stock_code
+ * @return array
+ */
+function _bse_stock_quote_get_stock_quote($stock_code) {
+  $cache_name = 'stock_quote_' . $stock_code;
+  if ($cache = cache_get($cache_name)) {
+    $quotes = $cache->data;
+  }
+  else {
+    $request_uri = 'http://www.stockstobuynow.in/applications/api/stockapp/quotes/' . $stock_code . '.json';
+    $stock_quote = drupal_http_request($request_uri);
+    $quotes = drupal_json_decode($stock_quote->data);
+    cache_set($cache_name, $quotes, 'cache');
+  }
+  return $quotes;
+}
+
+function pr($arr) {
+  print '<pre>';
+  print_r($arr);
+  print '</pre>';
+}

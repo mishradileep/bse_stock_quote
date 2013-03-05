@@ -1,0 +1,5 @@
+name = BSE Stock Quotes
+description = Get Stock BSE Quotes and display as Page or block.
+package = Finance
+version = 7.x-1.0
+core = 7.x

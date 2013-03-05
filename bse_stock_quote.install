@@ -1,0 +1,71 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the bse quotes module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function bse_stock_quote_schema() {
+  $schema['bse_stock_quote'] = array(
+      'description' => 'Subscribed Stocks Info.',
+      'fields' => array(
+          'id' => array(
+              'type' => 'serial',
+              'not null' => TRUE,
+              'size' => 'tiny',
+              'description' => 'Primary Key: Unique access ID.',
+          ),
+          'stock_code' => array(
+              'type' => 'varchar',
+              'length' => 255,
+              'not null' => TRUE,
+              'default' => '',
+              'description' => 'Stock registration code.',
+          ),
+          'stock_name' => array(
+              'type' => 'varchar',
+              'length' => 255,
+              'not null' => TRUE,
+              'default' => '',
+              'description' => 'Stock registartion name',
+          ),
+          'status' => array(
+              'type' => 'int',
+              'not null' => TRUE,
+              'size' => 'tiny',
+              'description' => 'status of the stock quote, 1 for active, 0 for inactive. Active stock only will be displayed.',
+          ),
+      ),
+      'primary key' => array('id'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function bse_stock_quote_install() {
+  $stocks_mapping_api_url = 'http://www.stockstobuynow.in/applications/api/stockapp/quotes/mapping.json';
+  $stocks_mapping = drupal_http_request($stocks_mapping_api_url);
+  $stocks_mapping_data = json_decode($stocks_mapping->data);
+  $stocks_arr = array();
+  $stocks_str = '';
+  foreach ($stocks_mapping_data->StockMap as $stock) {
+    $stocks_arr[$stock->stockCode] = $stock->stockName;
+  }
+  $stock_codes = drupal_get_path('module', 'bse_stock_quote') . '/stockcode.txt';
+  $stocks_str = serialize($stocks_arr);
+  $fp = fopen($stock_codes, 'w');
+  fwrite($fp, $stocks_str);
+  fclose($fp);
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function bse_stock_quote_uninstall() {
+  $stock_codes = drupal_get_path('module', 'bse_stock_quote') . '/stockcode.txt';
+  unlink($stock_codes);
+}
